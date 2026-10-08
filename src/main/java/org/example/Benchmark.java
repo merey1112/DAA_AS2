@@ -1,120 +1,168 @@
 package org.example;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.Locale;
 import java.util.Random;
 
 public class Benchmark {
 
+    private static final int[] SIZES = {100, 1000, 10000, 100000};
+
     public static void main(String[] args) {
-        int[] sizes = {100, 1000, 10000, 100000};
-        String csvFileName = "results.csv";
+        File resultsDir = new File("results");
+        if (!resultsDir.exists()) {
+            resultsDir.mkdirs();
+        }
 
-        try (PrintWriter writer = new PrintWriter(new FileWriter(csvFileName))) {
-            writer.println("DataStructure,Operation,Size,TimeMs,Steps,Comparisons,Moves");
+        File csvFile = new File(resultsDir, "results.csv");
 
-            Random random = new Random(42);
+        try (PrintWriter writer = new PrintWriter(new FileWriter(csvFile))) {
+            writer.println("DataStructure,Operation,Size,TimeMs,Steps,Comparisons");
 
-            for (int n : sizes) {
-                runDynamicArrayBenchmark(writer, n, random);
-                runLinkedListBenchmark(writer, n, random);
-                runMinHeapBenchmark(writer, n, random);
+            for (int size : SIZES) {
+                System.out.println("Running benchmarks for size n = " + size + "...");
+                runDynamicArrayBenchmarks(writer, size);
+                runLinkedListBenchmarks(writer, size);
+                runMinHeapBenchmarks(writer, size);
             }
 
-            System.out.println("Benchmark completed! Results saved to " + csvFileName);
+            System.out.println("Benchmark finished! Results written to results/results.csv");
 
         } catch (IOException e) {
-            System.err.println("Error writing to CSV: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
-    private static void runDynamicArrayBenchmark(PrintWriter writer, int n, Random random) {
-        Metrics metrics = new Metrics();
-        DynamicArray arr = new DynamicArray(metrics);
+    private static void runDynamicArrayBenchmarks(PrintWriter writer, int size) {
+        Random random = new Random(42);
 
-        // Add
-        long startTime = System.nanoTime();
-        for (int i = 0; i < n; i++) {
-            arr.add(random.nextInt(n));
+        // 1. Benchmark Add
+        Metrics metricsAdd = new Metrics();
+        DynamicArray arrayAdd = new DynamicArray(metricsAdd);
+        long startAdd = System.nanoTime();
+        for (int i = 0; i < size; i++) {
+            arrayAdd.add(random.nextInt());
         }
-        long endTime = System.nanoTime();
-        writeMetrics(writer, "DynamicArray", "Add", n, (endTime - startTime) / 1e6, metrics);
+        long endAdd = System.nanoTime();
+        double timeAddMs = (endAdd - startAdd) / 1_000_000.0;
+        writeRecord(writer, "DynamicArray", "Add", size, timeAddMs, metricsAdd);
 
-        // Access (Get)
-        metrics.reset();
-        startTime = System.nanoTime();
-        for (int i = 0; i < 1000; i++) {
-            arr.get(random.nextInt(n));
-        }
-        endTime = System.nanoTime();
-        writeMetrics(writer, "DynamicArray", "Get", n, (endTime - startTime) / 1e6, metrics);
+        // 2. Benchmark Get
+        Metrics metricsGet = new Metrics();
+        DynamicArray arrayGet = new DynamicArray(metricsGet);
+        for (int i = 0; i < size; i++) arrayGet.add(random.nextInt());
 
-        // Remove
-        metrics.reset();
-        startTime = System.nanoTime();
-        for (int i = 0; i < Math.min(n, 100); i++) {
-            arr.remove(0);
+        long startGet = System.nanoTime();
+        for (int i = 0; i < size; i++) {
+            int randomIndex = random.nextInt(size);
+            arrayGet.get(randomIndex);
         }
-        endTime = System.nanoTime();
-        writeMetrics(writer, "DynamicArray", "Remove", n, (endTime - startTime) / 1e6, metrics);
+        long endGet = System.nanoTime();
+        double timeGetMs = (endGet - startGet) / 1_000_000.0;
+        writeRecord(writer, "DynamicArray", "Get", size, timeGetMs, metricsGet);
+
+        // 3. Benchmark Remove
+        Metrics metricsRemove = new Metrics();
+        DynamicArray arrayRemove = new DynamicArray(metricsRemove);
+        for (int i = 0; i < size; i++) arrayRemove.add(random.nextInt());
+
+        long startRemove = System.nanoTime();
+        for (int i = 0; i < Math.min(100, size); i++) {
+            int currentSize = arrayRemove.size();
+            if (currentSize > 0) {
+                int removeIndex = random.nextInt(currentSize);
+                arrayRemove.remove(removeIndex);
+            }
+        }
+        long endRemove = System.nanoTime();
+        double timeRemoveMs = (endRemove - startRemove) / 1_000_000.0;
+        writeRecord(writer, "DynamicArray", "Remove", size, timeRemoveMs, metricsRemove);
     }
 
-    private static void runLinkedListBenchmark(PrintWriter writer, int n, Random random) {
-        Metrics metrics = new Metrics();
-        MyLinkedList list = new MyLinkedList(metrics);
+    private static void runLinkedListBenchmarks(PrintWriter writer, int size) {
+        Random random = new Random(42);
 
-        // Add
-        long startTime = System.nanoTime();
-        for (int i = 0; i < n; i++) {
-            list.add(random.nextInt(n));
+        // 1. Benchmark Add
+        Metrics metricsAdd = new Metrics();
+        MyLinkedList listAdd = new MyLinkedList(metricsAdd);
+        long startAdd = System.nanoTime();
+        for (int i = 0; i < size; i++) {
+            listAdd.add(random.nextInt());
         }
-        long endTime = System.nanoTime();
-        writeMetrics(writer, "MyLinkedList", "Add", n, (endTime - startTime) / 1e6, metrics);
+        long endAdd = System.nanoTime();
+        double timeAddMs = (endAdd - startAdd) / 1_000_000.0;
+        writeRecord(writer, "MyLinkedList", "Add", size, timeAddMs, metricsAdd);
 
-        // Access (Get)
-        metrics.reset();
-        startTime = System.nanoTime();
-        for (int i = 0; i < Math.min(n, 100); i++) {
-            list.get(random.nextInt(n));
-        }
-        endTime = System.nanoTime();
-        writeMetrics(writer, "MyLinkedList", "Get", n, (endTime - startTime) / 1e6, metrics);
+        // 2. Benchmark Get
+        Metrics metricsGet = new Metrics();
+        MyLinkedList listGet = new MyLinkedList(metricsGet);
+        for (int i = 0; i < size; i++) listGet.add(random.nextInt());
 
-        // Remove
-        metrics.reset();
-        startTime = System.nanoTime();
-        for (int i = 0; i < Math.min(n, 100); i++) {
-            list.remove(0);
+        long startGet = System.nanoTime();
+        int sampleCount = Math.min(1000, size);
+        for (int i = 0; i < sampleCount; i++) {
+            int randomIndex = random.nextInt(size);
+            listGet.get(randomIndex);
         }
-        endTime = System.nanoTime();
-        writeMetrics(writer, "MyLinkedList", "Remove", n, (endTime - startTime) / 1e6, metrics);
+        long endGet = System.nanoTime();
+        double timeGetMs = (endGet - startGet) / 1_000_000.0;
+        writeRecord(writer, "MyLinkedList", "Get", size, timeGetMs, metricsGet);
+
+        // 3. Benchmark Remove
+        Metrics metricsRemove = new Metrics();
+        MyLinkedList listRemove = new MyLinkedList(metricsRemove);
+        for (int i = 0; i < size; i++) listRemove.add(random.nextInt());
+
+        long startRemove = System.nanoTime();
+        for (int i = 0; i < Math.min(100, size); i++) {
+            int currentSize = listRemove.size();
+            if (currentSize > 0) {
+                int removeIndex = random.nextInt(currentSize);
+                listRemove.remove(removeIndex);
+            }
+        }
+        long endRemove = System.nanoTime();
+        double timeRemoveMs = (endRemove - startRemove) / 1_000_000.0;
+        writeRecord(writer, "MyLinkedList", "Remove", size, timeRemoveMs, metricsRemove);
     }
 
-    private static void runMinHeapBenchmark(PrintWriter writer, int n, Random random) {
-        Metrics metrics = new Metrics();
-        MinHeap heap = new MinHeap(metrics);
+    private static void runMinHeapBenchmarks(PrintWriter writer, int size) {
+        Random random = new Random(42);
 
-        // Insert
-        long startTime = System.nanoTime();
-        for (int i = 0; i < n; i++) {
-            heap.insert(random.nextInt(n));
+        // 1. Benchmark Insert
+        Metrics metricsInsert = new Metrics();
+        MinHeap heapInsert = new MinHeap(metricsInsert);
+        long startInsert = System.nanoTime();
+        for (int i = 0; i < size; i++) {
+            heapInsert.insert(random.nextInt());
         }
-        long endTime = System.nanoTime();
-        writeMetrics(writer, "MinHeap", "Insert", n, (endTime - startTime) / 1e6, metrics);
+        long endInsert = System.nanoTime();
+        double timeInsertMs = (endInsert - startInsert) / 1_000_000.0;
+        writeRecord(writer, "MinHeap", "Insert", size, timeInsertMs, metricsInsert);
 
-        // ExtractMin
-        metrics.reset();
-        startTime = System.nanoTime();
-        for (int i = 0; i < Math.min(n, 100); i++) {
-            heap.extractMin();
+        // 2. Benchmark ExtractMin
+        Metrics metricsExtract = new Metrics();
+        MinHeap heapExtract = new MinHeap(metricsExtract);
+        for (int i = 0; i < size; i++) heapExtract.insert(random.nextInt());
+
+        long startExtract = System.nanoTime();
+        for (int i = 0; i < size; i++) {
+            if (heapExtract.size() > 0) {
+                heapExtract.extractMin();
+            }
         }
-        endTime = System.nanoTime();
-        writeMetrics(writer, "MinHeap", "ExtractMin", n, (endTime - startTime) / 1e6, metrics);
+        long endExtract = System.nanoTime();
+        double timeExtractMs = (endExtract - startExtract) / 1_000_000.0;
+        writeRecord(writer, "MinHeap", "ExtractMin", size, timeExtractMs, metricsExtract);
     }
 
-    private static void writeMetrics(PrintWriter writer, String ds, String op, int size, double timeMs, Metrics metrics) {
-        writer.printf("%s,%s,%d,%.4f,%d,%d,%d%n",
-                ds, op, size, timeMs, metrics.getSteps(), metrics.getComparisons(), metrics.getMoves());
+    private static void writeRecord(PrintWriter writer, String structName, String operation, int size, double timeMs, Metrics metrics) {
+        String formattedTime = String.format(Locale.US, "%.4f", timeMs);
+        long steps = metrics != null ? metrics.getSteps() : 0;
+        long comparisons = metrics != null ? metrics.getComparisons() : 0;
+        writer.println(structName + "," + operation + "," + size + "," + formattedTime + "," + steps + "," + comparisons);
     }
 }

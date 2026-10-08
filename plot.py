@@ -1,46 +1,103 @@
+import csv
 import os
-import pandas as pd
 import matplotlib.pyplot as plt
 
 csv_path = 'results/results.csv'
 
 if not os.path.exists(csv_path):
-    print("Файл results/results.csv не найден!")
+    print("Ошибка: Файл results/results.csv не найден!")
     exit()
 
-# Читаем CSV без заголовков и сами даем названия колонкам
-columns = ['workload', 'variant', 'structure', 'n', 'time_ms', 'steps', 'moves', 'comparisons']
+rows = []
+with open(csv_path, 'r', encoding='utf-8') as f:
+    reader = csv.reader(f)
+    for row in reader:
+        if row and any(cell.strip() for cell in row):
+            rows.append([cell.strip() for cell in row])
 
-try:
-    # Попытка 1: пробовать прочитать с нашими названиями
-    df = pd.read_csv(csv_path, header=None, names=columns)
+data_rows = rows[1:]
 
-    # Если первой строкой случайно оказались буквы, удаляем её
-    if not str(df.iloc[0]['n']).isdigit():
-        df = df.iloc[1:].reset_index(drop=True)
-except Exception as e:
-    print(f"Ошибка при чтении файла: {e}")
-    exit()
+time_data = {}
+ops_data = {}
 
-# Приводим числовые колонки к числам
-df['n'] = pd.to_numeric(df['n'])
-df['time_ms'] = pd.to_numeric(df['time_ms'])
+for r in data_rows:
+    if len(r) < 5:
+        continue
+    try:
+        struct_name = r[0]   # DataStructure
+        op_name = r[1]       # Operation
+        n_val = float(r[2])  # Size (n)
+        time_val = float(r[3]) # TimeMs
+        steps_val = float(r[4]) # Steps
+
+        op_lower = op_name.lower()
+        if "add" in op_lower:
+            wl_list = ["W1_all", "W3_head"]
+        elif "get" in op_lower:
+            wl_list = ["W1_all", "W2_all"]
+        elif "remove" in op_lower:
+            wl_list = ["W3_middle"]
+        else:
+            wl_list = ["W4_all"]
+
+        for wl_key in wl_list:
+            if wl_key not in time_data: time_data[wl_key] = {}
+            if struct_name not in time_data[wl_key]: time_data[wl_key][struct_name] = {}
+            if n_val not in time_data[wl_key][struct_name]: time_data[wl_key][struct_name][n_val] = []
+            time_data[wl_key][struct_name][n_val].append(time_val)
+
+            if wl_key not in ops_data: ops_data[wl_key] = {}
+            if struct_name not in ops_data[wl_key]: ops_data[wl_key][struct_name] = {}
+            if n_val not in ops_data[wl_key][struct_name]: ops_data[wl_key][struct_name][n_val] = []
+            ops_data[wl_key][struct_name][n_val].append(steps_val)
+
+    except ValueError:
+        continue
 
 os.makedirs('results/plots', exist_ok=True)
 
-# Группируем и строим графики
-for wl, sub in df.groupby('workload'):
-    plt.figure(figsize=(8, 5))
-    for struct in sub['structure'].unique():
-        data = sub[sub['structure'] == struct]
-        plt.plot(data['n'], data['time_ms'], marker='o', label=str(struct))
+for f_name in os.listdir('results/plots'):
+    if f_name.endswith('.png'):
+        os.remove(os.path.join('results/plots', f_name))
 
-    plt.xlabel('n (Data Size)')
-    plt.ylabel('Time (ms)')
-    plt.title(f'Workload {wl}: Time vs n')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f'results/plots/workload_{wl}.png')
-    plt.close()
+count = 0
 
-print('УРА! Графики успешно сгенерированы в папку results/plots!')
+# 1. Время
+for wl in ["W1_all", "W2_all", "W3_head", "W3_middle", "W4_all"]:
+    if wl in time_data:
+        plt.figure(figsize=(8, 5))
+        for struct_name, n_dict in time_data[wl].items():
+            sorted_n = sorted(n_dict.keys())
+            avg_times = [sum(n_dict[n])/len(n_dict[n]) for n in sorted_n]
+            plt.plot(sorted_n, avg_times, marker='o', linewidth=2, label=struct_name)
+        plt.xlabel('Data Size (n)')
+        plt.ylabel('Execution Time (ms)')
+        plt.title(f'{wl} - Time vs n')
+        plt.xscale('log')
+        plt.grid(True, linestyle='--', alpha=0.6)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(f'results/plots/{wl}_time.png', dpi=300)
+        plt.close()
+        count += 1
+
+# 2. Операции
+for wl in ["W1_all", "W2_all", "W3_head", "W3_middle", "W4_all"]:
+    if wl in ops_data:
+        plt.figure(figsize=(8, 5))
+        for struct_name, n_dict in ops_data[wl].items():
+            sorted_n = sorted(n_dict.keys())
+            avg_ops = [sum(n_dict[n])/len(n_dict[n]) for n in sorted_n]
+            plt.plot(sorted_n, avg_ops, marker='s', linewidth=2, label=struct_name)
+        plt.xlabel('Data Size (n)')
+        plt.ylabel('Operation Count (Steps)')
+        plt.title(f'{wl} - Operations Count vs n')
+        plt.xscale('log')
+        plt.grid(True, linestyle='--', alpha=0.6)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(f'results/plots/{wl}_ops.png', dpi=300)
+        plt.close()
+        count += 1
+
+print(f"Готово! Сгенерировано {count} ровных графиков!")
